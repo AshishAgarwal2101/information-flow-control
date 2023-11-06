@@ -1,0 +1,14 @@
+{
+  "strict": true,
+  "default": "unknown",
+  "compilerOptions": {
+    "module": "commonjs",
+    "noImplicitAny": true,
+    "esModuleInterop": true,
+    "target": "es6",
+    "moduleResolution": "node",
+    "sourceMap": false,
+    "outDir": "dist"
+  },
+  "lib": ["es6"]
+}

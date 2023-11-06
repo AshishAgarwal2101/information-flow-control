@@ -1,0 +1,36 @@
+Information Leak Requirements ---------------------------------------
+Below is a function:function leak1(secret: SecurityTypeHigh | SecurityTypeLow) {
+    let x = SecurityWrapper(true, "L");
+    if(secret.securityValue) {
+        console.log("Inside first if");
+        x = SecurityWrapper(false, "L");
+    }
+
+    let y = SecurityWrapper(true, "L");
+    if(x.securityValue) {
+        console.log("Inside second if");
+        y = SecurityWrapper(false, "L");
+    }
+    return y;
+}
+
+SecurityWrapper returns SecurityTypeHigh if second parameter passed is "H", otherwise it returns SecurityTypeLow.
+
+I have a below requirements to prevent information leak:
+
+Whenever the if condition access a variable of type SecurityTypeHigh, I need to check all statements inside the if block.
+
+If any statement inside the if block changes the value of another variable into a public variable  (any variable not of type SecurityTypeHigh), then compilation must fail.
+
+Help me code the above using ES Lint.
+
+
+
+ES Lint AST Playground: https://typescript-eslint.io/
+
+
+ES Lint Docs custom rules:
+https://eslint.org/docs/latest/extend/custom-rules
+https://eslint.org/docs/latest/extend/scope-manager-interface#scope-interface
+
+

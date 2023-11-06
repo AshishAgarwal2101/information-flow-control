@@ -1,0 +1,24 @@
+{
+  "name": "GradualTyping",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "npx eslint src/informationLeakProblem.ts",
+    "ts": "npx tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.7.4",
+    "@typescript-eslint/parser": "^6.7.4",
+    "@typescript-eslint/utils": "^6.7.4",
+    "eslint": "^8.50.0",
+    "eslint-plugin-info-flow": "file:packages/info-flow"
+  },
+  "dependencies": {
+    "typescript": "^5.2.2"
+  }
+}

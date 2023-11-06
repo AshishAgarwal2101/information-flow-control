@@ -1,0 +1,5 @@
+Add ES Lint package:
+https://dev.to/devsmitra/how-to-create-a-custom-eslint-plugin-3bom
+
+Command to add info-flow package (as mentioned in the link above):
+npm install file:packages/info-flow -D
