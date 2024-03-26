@@ -4,7 +4,6 @@ module.exports = {
   rules: {
     'my-custom-rule': {
       create(context) {
-        // rule implementation
         const variables = new Set();
         const variableSecurityLevelMap = new Map();
 
@@ -14,14 +13,21 @@ module.exports = {
               const type = services.getTypeAtLocation(node.test.object);
               const scope = context.getScope();
               const symbol = (node.test.object?.name) ? services.getSymbolAtLocation(node.test.object) : null;
+              const comments = context.getSourceCode().getCommentsInside(node);
               
               if (containsHighSecurityIdentifier(scope, node.test)) {
                 const assignmentExpressions = getAllAssignments(node.consequent.body);
-                //console.log("Assignment Expressions: ", assignmentExpressions);
 
                 assignmentExpressions.forEach(assignmentExpression => {
-                  if (isAssigningToPublic(scope, assignmentExpression)) {
+                  if (!isIgnoreApplied(comments, assignmentExpression) && isAssigningToPublic(scope, assignmentExpression)) {
                     context.report(assignmentExpression, 'Assignment to public variable detected in a protected block');
+                  }
+
+                  const isHighSecurity = isPrivateAssignment(assignmentExpression);
+                  //let isHighSecurity = node.right.callee?.name === "SecurityWrapper" && node.right.arguments[1].value === "H";
+                  const oldSecurity = variableSecurityLevelMap.get(assignmentExpression.left.name);
+                  if(!isIgnoreApplied(comments, assignmentExpression) && oldSecurity !== "H" && isHighSecurity) {
+                    context.report(assignmentExpression, 'Sensitive Upgrade detected');
                   }
                   // if(isSecurityUpgrade(scope, assignmentExpression)) {
                   //   context.report(assignmentExpression, 'Security Upgrade detected');
@@ -43,29 +49,26 @@ module.exports = {
           // },
           VariableDeclarator: function (node) {
             const scope = context.getScope();
-            let isHighSecurity = node.init.callee?.name === "SecurityWrapper" && node.init.arguments[1].value === "H";
+            let isHighSecurity = isPrivateAssignment(node);
             variableSecurityLevelMap.set(node.id.name, isHighSecurity ? "H" : "L");
-
-            //variables.add({scope, node});
-            //console.log("jkhjhg:: ", node);
           },
           AssignmentExpression: function (node) {
-            let scope = context.getScope();
-            //console.log("node:  ", node);
-            let isHighSecurity = node.right.callee?.name === "SecurityWrapper" && node.right.arguments[1].value === "H";
-            let oldSecurity = variableSecurityLevelMap.get(node.left.name);
-            if(oldSecurity !== "H" && isHighSecurity) {
-              context.report(node, 'Security Upgrade detected');
-            }
-            //isSecurityUpgrade(scope, node.left.name);
+            const isHighSecurity = isPrivateAssignment(node);
+            variableSecurityLevelMap.set(node.left.name, isHighSecurity ? "H" : "L");
+            
+            //the rule to check no sensitive upgrade is written above in the check for "If" statements
           },
           ThrowStatement(node) {
             const services = utils.ESLintUtils.getParserServices(context);
             const scope = context.getScope();
+            const commentsBefore = context.getSourceCode().getCommentsBefore(node);
+            if(isIgnoreApplied(commentsBefore, node)) {
+              return;
+            }
+            
             if (node.argument && node.argument.type === 'NewExpression' && node.argument.callee.name === 'Error') {
               const errorMessageNode = node.argument.arguments && node.argument.arguments.length > 0 ? node.argument.arguments[0] : null;
               const types = getVariableTypesFromSymbol(services, errorMessageNode);
-              console.log("Types: ", types);
               if(types.includes("SecurityTypeHigh")) {
                 context.report({
                   node,
@@ -173,7 +176,6 @@ function containsHighSecurityIdentifier(scope, node) {
     if(nodeObj.type === "Identifier") {
       let variableTypes = getVariableTypes(scope, nodeObj.name);
       
-      //console.log("Variable types: ", variableTypes);
       if(variableTypes.length === 0) return true; //if variable type cannot be determined, assume it to be SecurityTypeHigh
       for(let i=0; i<variableTypes.length; i++) {
         if(variableTypes[i] === "SecurityTypeHigh") {
@@ -210,8 +212,6 @@ const getAllAssignments = (nodes) => {
 const isAssigningToPublic = (scope, assignmentExpression) => {
   if (assignmentExpression.left.type === 'Identifier') {
     let variableTypes = getVariableTypes(scope, assignmentExpression.left.name);
-    // console.log("Variable types for " + assignmentExpression.left.name + " = ");
-    // console.log(variableTypes, "\n");
     return !variableTypes.includes("SecurityTypeHigh") && getSecurityLevelOfAssignment(assignmentExpression) !== "H";
   };
 
@@ -220,8 +220,7 @@ const isAssigningToPublic = (scope, assignmentExpression) => {
 
 const isSecurityUpgrade = (scope, varName) => {
   const variable = scope.variables.find(v => v.name === varName);
-  let variableDefinitions = (variable?.defs && variable.defs.length > 0) ? (variable.defs.map((variableDef) => variableDef?.node?.init)) : null
-  console.log("var defs for : " + varName, variableDefinitions);
+  let variableDefinitions = (variable?.defs && variable.defs.length > 0) ? (variable.defs.map((variableDef) => variableDef?.node?.init)) : null;
 
   let lastSecurityLevel = null;
   for(let variableDef in variableDefinitions) {
@@ -238,9 +237,32 @@ const isSecurityUpgrade = (scope, varName) => {
 };
 
 const isSecurityUpgrade1 = (scope, assignmentExpression) => {
-  //console.log("Assignment: ", assignmentExpression);
   let oldLevel = getVariableTypes(scope, assignmentExpression.left.name).includes("SecurityTypeHigh") ? "H" : "L";
   let newLevel = getSecurityLevelOfAssignment(assignmentExpression);
   if(newLevel === "H" && oldLevel === "L") return true;
   return false;
 };
+
+const isIgnoreApplied = (comments, node) => {
+  let commentLineNumberSet = new Set(
+    comments
+      .filter((comment) => comment.value.trim() === "@IgnoreInformationFlow")
+      .map((comment) => getNodeLineNumbers(comment).start)
+  );
+
+  let nodeLineNumbers = getNodeLineNumbers(node);
+  return commentLineNumberSet.has(nodeLineNumbers.start - 1); //ignore comment present just above the node
+};
+
+const getNodeLineNumbers = (node) => {
+  return {
+    start: node.loc.start.line,
+    end: node.loc.end.line
+  }
+};
+
+const isPrivateAssignment = (node) => {
+  //console.log("Node: ", node);
+  const nodeInit = node.init ? node.init : node.right;
+  return nodeInit.callee?.name === "SecurityWrapper" && nodeInit.arguments[1].value === "H";
+}

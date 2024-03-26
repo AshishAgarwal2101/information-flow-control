@@ -1,3 +1,6 @@
+Old config ESLint:
+* In root package.json, devDep: "eslint-plugin-info-flow": "file:packages/info-flow"
+
 Information Leak Requirements ---------------------------------------
 Below is a function:function leak1(secret: SecurityTypeHigh | SecurityTypeLow) {
     let x = SecurityWrapper(true, "L");

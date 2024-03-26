@@ -40,6 +40,8 @@ function leak1(secret: SecurityTypeHigh | SecurityTypeLow) {
 function leak2(secret: SecurityTypeHigh | SecurityTypeLow) {
     let x = true;
     if(secret.securityValue) {
+        console.log();
+        //@jjIgnoreInformationFlow
         x = SecurityWrapper(true, "H");
     }
 
@@ -57,12 +59,13 @@ function leak2(secret: SecurityTypeHigh | SecurityTypeLow) {
 console.log("--------------------------------INFORMATION LEAK PROBLEM------------------------------------------");
 console.log(leak2(SecurityWrapper(false, "H")));
 
+// @IgnoreInformationFlow - tells that below information leak is safe (ignore below line from linting)
 function leak3(secret: SecurityTypeHigh | SecurityTypeLow) {
     if(secret.securityValue > 5) {
         throw new Error(secret.securityValue);
     }
 
-    //below, even if exception not thrown, information is leaked that secret's value is less than 5 (assuming sourve code is available with the hacker)
+    //below, even if exception not thrown, information is leaked that secret's value is less than 5 (assuming source code is available with the hacker)
     //TODO: prevent the below leak
     return true;
 }
@@ -75,3 +78,7 @@ try {
     let lowLeaked = err.message;
     console.log(lowLeaked);
 }
+
+
+//Implemented ignore rules
+//@IgnoreInformationFlow - tells that below information leak is safe (ignore below line from linting)
