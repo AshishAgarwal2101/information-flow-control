@@ -4,38 +4,59 @@ module.exports = {
   rules: {
     'my-custom-rule': {
       create(context) {
+        const variables = new Set();
         const variableSecurityLevelMap = new Map();
-        const propertyMap = new Map();
 
         return {
           IfStatement(node) {
             const services = utils.ESLintUtils.getParserServices(context);
-            const scope = context.getScope();
-            const comments = context.getSourceCode().getCommentsInside(node);
-            
-            if (containsHighSecurityIdentifier(scope, node.test)) {
-              const assignmentExpressions = getAllAssignments(node.consequent.body);
+              const type = services.getTypeAtLocation(node.test.object);
+              const scope = context.getScope();
+              const symbol = (node.test.object?.name) ? services.getSymbolAtLocation(node.test.object) : null;
+              const comments = context.getSourceCode().getCommentsInside(node);
+              
+              if (containsHighSecurityIdentifier(scope, node.test)) {
+                const assignmentExpressions = getAllAssignments(node.consequent.body);
 
-              assignmentExpressions.forEach(assignmentExpression => {
-                if (!isIgnoreApplied(comments, assignmentExpression) && isAssigningToPublic(services, assignmentExpression, scope, propertyMap)) {
-                  context.report(assignmentExpression, "Public assignment in a protected block");
-                }
+                assignmentExpressions.forEach(assignmentExpression => {
+                  if (!isIgnoreApplied(comments, assignmentExpression) && isAssigningToPublic(scope, assignmentExpression)) {
+                    context.report(assignmentExpression, "Public assignment in a protected block");
+                  }
 
-                const isHighSecurity = isPrivateAssignment(assignmentExpression);
-                const oldSecurity = variableSecurityLevelMap.get(assignmentExpression.left.name);
-                if(!isIgnoreApplied(comments, assignmentExpression) && oldSecurity !== "H" && isHighSecurity) {
-                  context.report(assignmentExpression, "Sensitive Upgrade detected");
-                }
-              });
-            }
+                  const isHighSecurity = isPrivateAssignment(assignmentExpression);
+                  //let isHighSecurity = node.right.callee?.name === "SecurityWrapper" && node.right.arguments[1].value === "H";
+                  const oldSecurity = variableSecurityLevelMap.get(assignmentExpression.left.name);
+                  if(!isIgnoreApplied(comments, assignmentExpression) && oldSecurity !== "H" && isHighSecurity) {
+                    context.report(assignmentExpression, "Sensitive Upgrade detected");
+                  }
+                  // if(isSecurityUpgrade(scope, assignmentExpression)) {
+                  //   context.report(assignmentExpression, 'Security Upgrade detected');
+                  // }
+                });
+              }
           },
+          // FunctionDeclaration: function (node) {
+          //   if (node.id.name === 'leak') {
+          //     const params = node.params;
+
+          //     if (params.length !== 1 || params[0].name !== 'secret') {
+          //       context.report({
+          //         node: node,
+          //         message: 'leak function signature must be leak(secret)'
+          //       });
+          //     }
+          //   }
+          // },
           VariableDeclarator: function (node) {
+            const scope = context.getScope();
             let isHighSecurity = isPrivateAssignment(node);
             variableSecurityLevelMap.set(node.id.name, isHighSecurity ? "H" : "L");
           },
           AssignmentExpression: function (node) {
             const isHighSecurity = isPrivateAssignment(node);
             variableSecurityLevelMap.set(node.left.name, isHighSecurity ? "H" : "L");
+            
+            //the rule to check no sensitive upgrade is written above in the check for "If" statements
           },
           ThrowStatement(node) {
             const services = utils.ESLintUtils.getParserServices(context);
@@ -48,7 +69,7 @@ module.exports = {
             
             if (node.argument && node.argument.type === 'NewExpression' && node.argument.callee.name === 'Error') {
               const errorMessageNode = node.argument.arguments && node.argument.arguments.length > 0 ? node.argument.arguments[0] : null;
-              const types = getVariableTypesFromNode(services, errorMessageNode, scope, propertyMap);
+              const types = getVariableTypesFromSymbol(services, errorMessageNode, scope);
               if(types.includes("SecurityTypeHigh")) {
                 context.report({
                   node,
@@ -68,7 +89,7 @@ module.exports = {
 
             if (node.callee.type === 'MemberExpression' && node.callee.object.name === 'console' && node.callee.property.name === 'log') {
               const consoleNode = node.arguments && node.arguments.length > 0 ? node.arguments[0] : null;
-              const types = getVariableTypesFromNode(services, consoleNode, scope, propertyMap);
+              const types = getVariableTypesFromSymbol(services, consoleNode, scope);
               if(types.includes("SecurityTypeHigh")) {
                 context.report({
                   node,
@@ -77,23 +98,32 @@ module.exports = {
               }
             }
           },
-          PropertyDefinition(node) {
-            const variableName = node.key.name;
-            const typeAnnotation = context.getSourceCode().getText(node.typeAnnotation)?.replace(": ", "")?.replace(" ", "");
-            if(variableName && typeAnnotation) propertyMap.set(variableName, typeAnnotation);
-          }
+          // 'Program:exit': function () {
+          //   variables.forEach((variableData) => {
+          //     let {scope, node} = variableData;
+          //     //console.log("Variable:: ", variable);
+          //     isSecurityUpgrade(scope, node.id.name);
+          //   });
+          // },
+          // Program: function(node) {
+          //   const assignmentExpressions = getAllAssignments(node.consequent.body);
+          //   assignmentExpressions.forEach(assignmentExpression => {
+          //     if(isSecurityUpgrade(scope, assignmentExpression)) {
+          //       context.report(assignmentExpression, 'Security Upgrade detected');
+          //     }
+          //   });
+          // }
         };
       }
     }
   }
 }
 
-const getVariableTypesFromNode = (services, variableNode, scope, propertyMap) => {
+const getVariableTypesFromSymbol = (services, variableNode, scope) => {
   if(!services || !variableNode) return [];
   const varObjects = getNodeObjects(variableNode);
-  const classProperties = getNodeClassProperty(variableNode);
 
-  //using symbol
+  //this way, without using variable name - in this case, SecurityWrapper call is not considered
   let varTypes = varObjects.map(varObject => services.getTypeAtLocation(varObject));
   varTypes = varTypes.flatMap((varType) => {
     if(!varType.symbol && varType.types) return varType.types;
@@ -104,46 +134,8 @@ const getVariableTypesFromNode = (services, variableNode, scope, propertyMap) =>
   let types = symbols.map((symbol) => symbol?.escapedName);
   types = types.filter((type) => type);
   
-  //using variable name
   const typesWithScope = varObjects.flatMap(varObject => getVariableTypes(scope, varObject?.object?.name));
-
-  //using class properties
-  const classPropertyAnnotations = classProperties
-      .map(classProperty => propertyMap.get(classProperty.name))
-      .filter(annotation => annotation);
-
-  return [...types, ...typesWithScope, ...classPropertyAnnotations];
-};
-
-const getNodeObjects = (node) => {
-  if(!node) return [];
-  if(node.type === "Identifier") return [node];
-  if(node.object?.type === "Identifier") return [node.object];
-  if(!node.left && !node.right && !node.object) return [];
-  
-  let allNodeObjects = [];
-  let leftNodeObjects = getNodeObjects(node.left);
-  let rightNodeObjects = getNodeObjects(node.right);
-  let objectNodeObjects = getNodeObjects(node.object);
-  allNodeObjects = leftNodeObjects ? allNodeObjects.concat(leftNodeObjects) : allNodeObjects;
-  allNodeObjects = rightNodeObjects ? allNodeObjects.concat(rightNodeObjects) : allNodeObjects;
-  allNodeObjects = objectNodeObjects ? allNodeObjects.concat(objectNodeObjects) : allNodeObjects;
-  return allNodeObjects;
-};
-
-const getNodeClassProperty = (node) => {
-  if(!node) return [];
-  if(node.property && node?.object?.type === "ThisExpression") return [node.property];
-  if(!node.left && !node.right && !node.object) return [];
-  
-  let allNodeClassProperties = [];
-  let leftNodeClassProperties = getNodeClassProperty(node.left);
-  let rightNodeClassProperties = getNodeClassProperty(node.right);
-  let objectNodeClassProperties = getNodeClassProperty(node.object);
-  allNodeClassProperties = leftNodeClassProperties ? allNodeClassProperties.concat(leftNodeClassProperties) : allNodeClassProperties;
-  allNodeClassProperties = rightNodeClassProperties ? allNodeClassProperties.concat(rightNodeClassProperties) : allNodeClassProperties;
-  allNodeClassProperties = objectNodeClassProperties ? allNodeClassProperties.concat(objectNodeClassProperties) : allNodeClassProperties;
-  return allNodeClassProperties;
+  return [...types, ...typesWithScope];
 };
 
 const getVariableTypes = (scope, varName) => {
@@ -192,6 +184,22 @@ const getSecurityLevelOfAssignment = (assignmentExpression) => {
   return "L";
 };
 
+const getNodeObjects = (node) => {
+  if(!node) return [];
+  if(node.type === "Identifier") return [node];
+  if(node.object?.type === "Identifier") return [node.object];
+  if(!node.left && !node.right && !node.object) return [];
+  
+  let allNodeObjects = [];
+  let leftNodeObjects = getNodeObjects(node.left);
+  let rightNodeObjects = getNodeObjects(node.right);
+  let objectNodeObjects = getNodeObjects(node.object);
+  allNodeObjects = leftNodeObjects ? allNodeObjects.concat(leftNodeObjects) : allNodeObjects;
+  allNodeObjects = rightNodeObjects ? allNodeObjects.concat(rightNodeObjects) : allNodeObjects;
+  allNodeObjects = objectNodeObjects ? allNodeObjects.concat(objectNodeObjects) : allNodeObjects;
+  return allNodeObjects;
+};
+
 function containsHighSecurityIdentifier(scope, node) {
   let nodeObjects = getNodeObjects(node);
   for(let i=0; i<nodeObjects.length; i++) {
@@ -214,20 +222,59 @@ function containsHighSecurityIdentifier(scope, node) {
   return false;
 }
 
+const getObjectNodesFromExpression = (node) => {
+  let objectNode = node.object;
+  if(objectNode) {
+    return [objectNode];
+  }
+
+  let nodes = [];
+  let leftNode = node?.left?.object;
+  let rightNode = node?.right?.object;
+  if(leftNode) nodes.push(leftNode);
+  if(rightNode) nodes.push(rightNode);
+  return nodes;
+}
+
 const getAllAssignments = (nodes) => {
   if(!nodes) return [];
   const expressions = nodes.map((node) => node.expression);
   return expressions.filter((expression) => expression && expression.type === 'AssignmentExpression');
 };
 
-const isAssigningToPublic = (services, assignmentExpression, scope, propertyMap) => {
-  if (assignmentExpression.left.type === 'Identifier' || assignmentExpression.left.type === "MemberExpression") {
-    let variableTypes = getVariableTypesFromNode(services, assignmentExpression.left, scope, propertyMap);
+const isAssigningToPublic = (scope, assignmentExpression) => {
+  if (assignmentExpression.left.type === 'Identifier') {
+    let variableTypes = getVariableTypes(scope, assignmentExpression.left.name);
     return !variableTypes.includes("SecurityTypeHigh") && getSecurityLevelOfAssignment(assignmentExpression) !== "H";
   };
 
   return false;
 }
+
+const isSecurityUpgrade = (scope, varName) => {
+  const variable = scope.variables.find(v => v.name === varName);
+  let variableDefinitions = (variable?.defs && variable.defs.length > 0) ? (variable.defs.map((variableDef) => variableDef?.node?.init)) : null;
+
+  let lastSecurityLevel = null;
+  for(let variableDef in variableDefinitions) {
+    let isHighSecurity = variableDef?.callee?.name === "SecurityWrapper" && variableDef.arguments[1].value === "H";
+    if(lastSecurityLevel === null) {
+      lastSecurityLevel = isHighSecurity ? "H" : "L";
+    }
+    else if(lastSecurityLevel === "L" && isHighSecurity) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const isSecurityUpgrade1 = (scope, assignmentExpression) => {
+  let oldLevel = getVariableTypes(scope, assignmentExpression.left.name).includes("SecurityTypeHigh") ? "H" : "L";
+  let newLevel = getSecurityLevelOfAssignment(assignmentExpression);
+  if(newLevel === "H" && oldLevel === "L") return true;
+  return false;
+};
 
 const isIgnoreApplied = (comments, node) => {
   let commentLineNumberSet = new Set(

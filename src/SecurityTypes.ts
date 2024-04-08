@@ -1,17 +1,17 @@
 export class SecurityTypeHigh {
-    securityValue: any;
+    value: any;
     securityLevel: string;
-    constructor(securityValue: any) {
-        this.securityValue = securityValue;
+    constructor(value: any) {
+        this.value = value;
         this.securityLevel = "H";
     }
 }
 
 export class SecurityTypeLow {
-    securityValue: any;
+    value: any;
     securityLevel: string;
-    constructor(securityValue: any) {
-        this.securityValue = securityValue;
+    constructor(value: any) {
+        this.value = value;
         this.securityLevel = "L";
     }
 }
@@ -35,11 +35,11 @@ export const SecurityWrapper = (value: any, securityLevel: string) => {
 const proxyHandlerSt = {
     get(target: any, prop: any): any {
         //when actual values of SecurityType are asked
-        if(prop === "securityValue") {
+        if(prop === "value") {
             return Reflect.get(target, prop);
         }
 
-        const prim = Reflect.get(target, 'securityValue');
+        const prim = Reflect.get(target, 'value');
         const targetSecurityType = Reflect.get(target, 'securityLevel');
         const value = prim[prop];
 
@@ -54,7 +54,7 @@ const proxyHandlerSt = {
             let maxSecurityLevel = targetSecurityType;
             const updatedArgs = args.map((arg) => {
                 if(instanceOfSecurityType(arg)) {
-                    const argValue = Reflect.get(arg, "securityValue", arg);
+                    const argValue = Reflect.get(arg, "value", arg);
                     const argSecurityLevel = Reflect.get(arg, "securityLevel", arg);
                     if(argSecurityLevel === "H") {
                         maxSecurityLevel = "H";
