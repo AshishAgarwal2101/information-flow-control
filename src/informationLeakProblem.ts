@@ -25,7 +25,8 @@ function leak2(secret: SecurityTypeHigh | SecurityTypeLow) {
 
 function leak3(secret: SecurityTypeHigh) {
     if(secret.value > 5) {
-        throw new Error("The value of secret is " + secret.value + ", which does not satisfy requirements.");
+        throw new Error("The value of secret is " + secret.value + 
+            ", which does not satisfy requirements.");
     }
     return "Secret value is less than 5";
 }
@@ -42,7 +43,6 @@ function sendViaApi(secret: SecurityTypeHigh) {
     }
 }
 
-console.log("--------------------------------INFORMATION LEAK PROBLEM------------------------------------------");
 console.log(leak1(SecurityWrapper(false, "H")));
 console.log(leak2(SecurityWrapper(true, "H")));
 console.log(sendViaApi(SecurityWrapper(4, "H")));

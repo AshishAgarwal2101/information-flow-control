@@ -13,16 +13,19 @@ module.exports = {
             const scope = context.getScope();
             const comments = context.getSourceCode().getCommentsInside(node);
             
-            if (containsHighSecurityIdentifier(scope, node.test)) {
-              const assignmentExpressions = getAllAssignments(node.consequent.body);
+            if (containsHighSecurityIdentifier(
+              services, node.test, scope, propertyMap)) {
+              const assignmentExpressions = getAllAssignments(node.consequent);
 
               assignmentExpressions.forEach(assignmentExpression => {
                 if (!isIgnoreApplied(comments, assignmentExpression) && isAssigningToPublic(services, assignmentExpression, scope, propertyMap)) {
-                  context.report(assignmentExpression, "Public assignment in a protected block");
+                  context.report(assignmentExpression, 
+                    "Public assignment in a protected block");
                 }
 
                 const isHighSecurity = isPrivateAssignment(assignmentExpression);
-                const oldSecurity = variableSecurityLevelMap.get(assignmentExpression.left.name);
+                const oldSecurity = variableSecurityLevelMap
+                  .get(assignmentExpression.left ? assignmentExpression.left.name : assignmentExpression.id.name);
                 if(!isIgnoreApplied(comments, assignmentExpression) && oldSecurity !== "H" && isHighSecurity) {
                   context.report(assignmentExpression, "Sensitive Upgrade detected");
                 }
@@ -46,13 +49,16 @@ module.exports = {
               return;
             }
             
-            if (node.argument && node.argument.type === 'NewExpression' && node.argument.callee.name === 'Error') {
-              const errorMessageNode = node.argument.arguments && node.argument.arguments.length > 0 ? node.argument.arguments[0] : null;
+            if (node.argument && node.argument.type === 'NewExpression' && 
+              node.argument.callee.name === 'Error') {
+              const errorMessageNode = node.argument.arguments && 
+                node.argument.arguments.length > 0 ? node.argument.arguments[0] : null;
               const types = getVariableTypesFromNode(services, errorMessageNode, scope, propertyMap);
               if(types.includes("SecurityTypeHigh")) {
                 context.report({
                   node,
-                  message: "High security values cannot be passed as an error parameter",
+                  message: 
+                    "High security values cannot be passed as an error parameter",
                 });
               }
             }
@@ -192,36 +198,28 @@ const getSecurityLevelOfAssignment = (assignmentExpression) => {
   return "L";
 };
 
-function containsHighSecurityIdentifier(scope, node) {
-  let nodeObjects = getNodeObjects(node);
-  for(let i=0; i<nodeObjects.length; i++) {
-    let nodeObj = nodeObjects[i];
-    
-    if(nodeObj.type === "Identifier") {
-      let variableTypes = getVariableTypes(scope, nodeObj.name);
-      
-      if(variableTypes.length === 0) return true; //if variable type cannot be determined, assume it to be SecurityTypeHigh
-      for(let i=0; i<variableTypes.length; i++) {
-        if(variableTypes[i] === "SecurityTypeHigh") {
-          return true;
-        }
-      }
-    }
-    else {
-      return node.children?.some(containsHighSecurityIdentifier);
-    }
-  }
-  return false;
+function containsHighSecurityIdentifier(services, node, scope, propertyMap) {
+  let variableTypes = getVariableTypesFromNode(services, node, scope, propertyMap);
+  return variableTypes.includes("SecurityTypeHigh");
 }
 
-const getAllAssignments = (nodes) => {
-  if(!nodes) return [];
+const getAllAssignments = (nodeConsequent) => {
+  if(!nodeConsequent) return [];
+  const nodes = nodeConsequent.body ? nodeConsequent.body : [nodeConsequent];
+  const variableDeclarations = nodes
+    .filter((node) => node.type === "VariableDeclaration")
+    .flatMap((node) => node.declarations)
+    .filter((node) => node.type === "VariableDeclarator");
   const expressions = nodes.map((node) => node.expression);
-  return expressions.filter((expression) => expression && expression.type === 'AssignmentExpression');
+  const assignments = expressions.filter((expression) => expression && (expression.type === 'AssignmentExpression'));
+  return [...variableDeclarations, ...assignments];
 };
 
 const isAssigningToPublic = (services, assignmentExpression, scope, propertyMap) => {
-  if (assignmentExpression.left.type === 'Identifier' || assignmentExpression.left.type === "MemberExpression") {
+  if(assignmentExpression.type === "VariableDeclarator") {
+    return !isPrivateAssignment(assignmentExpression);
+  }
+  else if (assignmentExpression.left.type === 'Identifier' || assignmentExpression.left.type === "MemberExpression") {
     let variableTypes = getVariableTypesFromNode(services, assignmentExpression.left, scope, propertyMap);
     return !variableTypes.includes("SecurityTypeHigh") && getSecurityLevelOfAssignment(assignmentExpression) !== "H";
   };

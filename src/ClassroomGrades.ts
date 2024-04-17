@@ -20,7 +20,8 @@ class Teacher {
     assignGrades() {
         this.students.forEach((student: SecurityTypeLow, index: number) => {
             const randomGradeVal: number = Math.floor(Math.random() * 85) + 15;
-            const grade: SecurityTypeHigh = SecurityWrapper(new Grade(index, student.value.id, this.courseId, randomGradeVal), "H");
+            const grade: SecurityTypeHigh = SecurityWrapper(new Grade(
+                index, student.value.id, this.courseId, randomGradeVal), "H");
             this.gradeMap.set(student.value.id, grade);
         });
     }
@@ -35,7 +36,8 @@ class Teacher {
 
     //leak 1
     publicAnnounceStudentGrade(studentId: number) {
-        const student: SecurityTypeLow = this.students.find(student => student.value.id === studentId);
+        const student: SecurityTypeLow = this.students.find(student => 
+            student.value.id === studentId);
         if(student) {
             const grade: SecurityTypeHigh = this.gradeMap.get(studentId);
             console.log(student.value.name + "'s grade is " + grade.value.val);
@@ -47,7 +49,8 @@ class Teacher {
         this.students.forEach((student: SecurityTypeLow) => {
             const grade: SecurityTypeHigh = this.gradeMap.get(student.value.id);
             if(grade.value.val < 40) {
-                throw new Error("Student " + student.value.name + " has failed. Score is " + grade.value.val);
+                throw new Error("Student " + student.value.name + 
+                    " has failed. Score is " + grade.value.val);
             }
         })
     }
@@ -92,7 +95,8 @@ class Student {
             }
         }
         
-        console.log("Score " + (isScoreWithinRange ? "is" : "is not") + " within 10 and 20");
+        console.log("Score " + (isScoreWithinRange ? "is" : "is not") + 
+            " within 10 and 20");
     }
 
     //leak 3

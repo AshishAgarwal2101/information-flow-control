@@ -4,24 +4,24 @@ class Account {
     userId: number;
     userName: String;
     balance: SecurityTypeHigh;
-    //transactionHistory: Array<SecurityTypeHigh>;
     numHighValueDebits: number;
 
     public constructor(userId: number, userName: String) {
         this.userId = userId;
         this.userName = userName
         this.balance = SecurityWrapper(0, "H");
-        //this.transactionHistory = [];
         this.numHighValueDebits = 0;
     }
 
     depositFunds(amount: SecurityTypeHigh) {
         this.balance.value = this.balance.value + amount.value;
+        console.log("Deposit successful");
     }
 
     transferFunds(amount: SecurityTypeHigh, toAccount: Account) {
         if(this.balance.value < amount.value) {
-            throw new Error("Account holder does not have sufficient funds. Current balance is " + this.balance.value);
+            throw new Error("Insufficient funds. Current balance is " + 
+                this.balance.value);
         }
         this.balance.value = this.balance.value - amount.value;
         toAccount.balance.value = toAccount.balance.value + amount.value;
@@ -32,11 +32,10 @@ class Account {
     }
 
     updateSecondaryFields(amount: SecurityTypeHigh, isDebit: boolean) {
-        const debit: SecurityTypeHigh = isDebit ? amount : SecurityWrapper(0, "H");
-        const credit: SecurityTypeHigh = isDebit ? SecurityWrapper(0, "H") : amount;
-        //this.transactionHistory.push(SecurityWrapper({debit, credit}, "H"));
-        
+        const debit: SecurityTypeHigh = isDebit ? amount : SecurityWrapper(0, 
+            "H");
         if(debit.value > 5000) {
+            //@IgnoreInformationFlow
             this.numHighValueDebits = this.numHighValueDebits + 1;
             console.log("High value debit of amount " + amount.value);
         }
