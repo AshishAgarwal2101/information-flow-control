@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "lint": "export TIMING=1 || set TIMING=1 && npx eslint src/TransactionSystem.ts",
+    "lint": "export TIMING=1 || set TIMING=1 && npx eslint",
     "ts": "npx tsc"
   },
   "keywords": [],
